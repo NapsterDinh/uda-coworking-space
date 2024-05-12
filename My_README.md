@@ -28,7 +28,7 @@ cd ./deliverables/cloudformation
 
 ## 3. Create EKS Cluster
 - Install Kubetcl <a href="https://eksctl.io/installation/">here</a>
-- Create cluster
+- Create cluster (it takes 10-15 minutes)
 ```bash
 eksctl create cluster --name tsu-cluster --region us-east-1 --nodegroup-name tsu-nodes --node-type t3.small --nodes 1 --nodes-min 1 --nodes-max 2
 ```
@@ -53,7 +53,7 @@ kubectl get namespace
 ```
 - Create PersistentVolumeClaim, PersistentVolume and deploy it to cluster
 ```bash
-cd ./db
+cd ./deployment
 kubectl apply -f pvc.yaml
 kubectl apply -f pv.yaml
 kubectl apply -f postgresql-deployment.yaml
@@ -121,10 +121,36 @@ python3 app.py
 ```bash
 curl 127.0.0.1:5153/api/reports/daily_usage
 ```
+## 5.Deploy application
+- Run this below command to create configMap, secret, deployment and load balancer for application
+```bash
+kubectl apply -f secret.yaml 
+kubectl apply -f configmap.yaml 
+kubectl apply -f service.yaml 
+kubectl apply -f coworking.yaml 
+```
+- Verify deployment by:
+```bash
+kubectl get svc
+```
 
+## 6. CloudWatch Container Insights
+- Visit AWS Management Console -> EKS -> Choose your cluster -> Observability -> Control plane logging -> Enable all options
 
-# Tear down instructions
+Step 1. Attach the CloudWatchAgentServerPolicy IAM policy to your worker nodes:
+Replace `eksctl-tsu-cluster-nodegroup-tsu-n-NodeInstanceRole-bNQSTJKgFryo` with your EKS cluster's Node Group's IAM role.
+```bash
+aws iam attach-role-policy \
+--role-name eksctl-tsu-cluster-nodegroup-tsu-n-NodeInstanceRole-bNQSTJKgFryo \
+--policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy 
+```
+Step 2. Use AWS CLI to install the Amazon CloudWatch Observability EKS add-on:
+```bash
+aws eks create-addon --addon-name amazon-cloudwatch-observability --cluster-name tsu-cluster
+```
+Step 3. Trigger logging by accessing your application.
+
+Step 4. Open up CloudWatch Log groups page. You should see aws/containerinsights/my-cluster-name/application there.
 
 # Stand out instructions
 
-Test
