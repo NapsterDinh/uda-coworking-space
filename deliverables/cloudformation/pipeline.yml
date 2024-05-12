@@ -1,0 +1,665 @@
+Description: CD12355 - Microservices AWS Kubernetes Project Starter
+
+Parameters:
+  EnvironmentName:
+    Description: Deploy Environment
+    Type: String
+    Default: 'napster-self-project-ci'
+    
+  DefaultVPCCidr:
+    Description: The Cidr block for default VPC
+    Type: String
+    Default: 10.0.0.0/16
+    
+  PublicSubnet1CIDR:
+    Description: IP range in CIDR notation for the public subnet in the first Availability Zone
+    Type: String
+
+  PublicSubnet2CIDR:
+    Description: IP range in CIDR notation for the public subnet in the second Availability Zone
+    Type: String
+
+  PrivateSubnet1CIDR:
+    Description: IP range in CIDR notation for the private subnet in the first Availability Zone
+    Type: String
+    
+  PrivateSubnet2CIDR:
+    Description: IP range in CIDR notation for the private subnet in the second Availability Zone
+    Type: String
+    
+  ParamGithubRepoUrl: 
+    Description: Url of github repo which contains project code
+    Type: String  
+  
+  ParamGithubRepoName: 
+    Description: Name of github repo which contains project code (only repo name, not contains .git and protocol)
+    Type: String
+    
+  ParamBuildSpecPath: 
+    Description: Build spec file path
+    Type: String
+  
+Resources:
+  # VPC
+  DefaultVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref DefaultVPCCidr
+      EnableDnsHostnames : true
+      EnableDnsSupport: true
+      
+  # SUBNETS    
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref DefaultVPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+    
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      VpcId: !Ref DefaultVPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+  
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref DefaultVPC
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+          
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      VpcId: !Ref DefaultVPC
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+          
+  # INTERNET GATEWAY      
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+          
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DefaultVPC
+      InternetGatewayId: !Ref InternetGateway
+      
+  # PUBLIC ROUTING
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref DefaultVPC
+          
+  PublicRoute: 
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties: 
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref InternetGateway
+      DestinationCidrBlock: 0.0.0.0/0
+  
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+      
+  # ELASTIC IP
+  NATPublicIP:
+    Type: AWS::EC2::EIP
+    DependsOn: DefaultVPC
+    Properties: 
+      Domain: vpc
+
+  # NAT GATEWAY
+  NATGateway: 
+    Type: AWS::EC2::NatGateway
+    DependsOn: NATPublicIP
+    Properties: 
+      AllocationId: !GetAtt NATPublicIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+          
+  # PRIVATE ROUTING
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref DefaultVPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      NatGatewayId: !Ref NATGateway
+      DestinationCidrBlock: 0.0.0.0/0
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+      
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  # ECR repository
+  ECRRepository: 
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: !Sub ${EnvironmentName}-ecr-repo
+      
+  # S3
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "${EnvironmentName}-s3-bucket"
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true 
+    
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:* 
+            Resource:
+              - !Sub arn:aws:s3:::${S3Bucket}
+              - !Sub arn:aws:s3:::${S3Bucket}/*
+            Principal:
+              AWS:
+                - !GetAtt PipeLineRole.Arn
+      
+  # IAM execution role that trusts CloudFormation to create an S3 bucket and EC2
+  CloudformationDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-cfn-deployer-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              
+  CloudformationDeployPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${EnvironmentName}-create-s3-ec2-policy"
+      Roles:
+        - !Ref CloudformationDeployRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - !Sub "arn:aws:s3:::${S3Bucket}" 
+          - Effect: Allow
+            Action:
+              - 'ec2:*'
+            Resource: '*'
+
+  # Codebuild with Github token
+  CodeBuildSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn:
+      - DefaultVPC
+    Properties:
+      GroupDescription: Allow http access to our vpc
+      VpcId: !Ref DefaultVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+  
+  CodeBuildSourceCredential:
+    Type: AWS::CodeBuild::SourceCredential
+    Properties:
+      AuthType: PERSONAL_ACCESS_TOKEN
+      ServerType: GITHUB
+      Token: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubSecret}}"
+      
+  CodeBuild:
+    DependsOn: 
+      - DefaultVPC
+      - PrivateSubnet1
+      - PrivateSubnet2
+      - CodeBuildBasePolicy
+      - CodeBuildVPCPolicy
+      - CodeBuildParameterStorePolicy
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${EnvironmentName}-codebuild
+      Source:
+        Type: GITHUB
+        Location: !Ref ParamGithubRepoUrl
+        GitCloneDepth: 1
+        BuildSpec: !Ref ParamBuildSpecPath
+        Auth:
+          Resource: !Ref CodeBuildSourceCredential
+          Type: OAUTH
+      Triggers:
+        BuildType: BUILD
+        Webhook: true
+        FilterGroups:
+          - - Type: EVENT
+              Pattern: PUSH
+            - Type: HEAD_REF
+              #Pattern: ^refs/heads/feature/.*
+              Pattern: ^refs/heads/main
+              ExcludeMatchedPattern: false
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: true
+        ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Type: PLAINTEXT
+            Value: us-east-1
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Sub ${AWS::AccountId}
+          - Name: IMAGE_REPO_NAME
+            Type: PLAINTEXT
+            Value: !Ref ECRRepository
+      ServiceRole: !Ref CodeBuildRole
+      VpcConfig:
+        VpcId: !Ref DefaultVPC
+        Subnets:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref CodeBuildSecurityGroup
+      Artifacts:
+        Type: NO_ARTIFACTS
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub ${EnvironmentName}-CloudWatchLogs-BuildLogGroup-Name
+  
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  
+  CodeBuildBasePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}-codebuild-base-policy
+      Roles:
+        - !Ref CodeBuildRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetBucketPolicy
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: 
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - !Sub "arn:aws:s3:::${S3Bucket}" 
+          - Effect: Allow
+            Action:
+              - codebuild:ListBuilds
+              - codebuild:UpdateProject
+              - codebuild:ListProjects
+              - codebuild:CreateReportGroup
+              - codebuild:CreateReport
+              - codebuild:BatchPutTestCases
+              - codebuild:UpdateReport          
+            Resource:  "*" 
+          - Effect: Allow
+            Action:
+              - cloudformation:ValidateTemplate
+              - cloudformation:ListStacks
+              - cloudformation:Describe* 
+            Resource:  "*"
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+            Resource:  "*"
+          - Effect: Allow
+            Resource:
+              - "*"
+            Action:
+              - ecr:*
+        
+  CodeBuildVPCPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - PrivateSubnet1
+      - PrivateSubnet2
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}-codebuild-vpc-policy
+      Roles:
+        - !Ref CodeBuildRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Resource:
+              - "*"
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeDhcpOptions
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteNetworkInterface
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeVpcs
+          - Effect: Allow
+            Resource:
+              - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+            Action:
+              - ec2:CreateNetworkInterfacePermission
+            Condition:
+              StringEquals:
+                ec2:Subnet:
+                  - !Ref PrivateSubnet1
+                  - !Ref PrivateSubnet2
+                ec2:AuthorizedService: codebuild.amazonaws.com
+    
+  CodeBuildParameterStorePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}-parameter-store-policy
+      Roles:
+        - !Ref CodeBuildRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Resource:
+              - "*"
+            Action:
+              - ssm:DescribeParameters
+          - Effect: Allow
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+            Action:
+              - ssm:GetParameters
+          - Effect: Allow
+            Resource:
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*
+            Action:
+              - secretsmanager:GetSecretValue  
+               
+  # CodePipeline
+  PipeLineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-codepipeline-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  
+  PipeLinePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${EnvironmentName}-pipeline-policy"
+      Roles:
+        - !Ref PipeLineRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - cloudformation:Describe*
+              - cloudFormation:List*
+              - cloudformation:CreateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:UpdateStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:SetStackPolicy
+              - cloudformation:ValidateTemplate
+              - cloudformation:UpdateTerminationProtection
+              - cloudformation:TagResource
+              - cloudformation:UntagResource
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+              - codebuild:StartBuild
+              - codebuild:BatchGetBuilds
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents    
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+              - secretsmanager:GetSecretValue
+            Resource: "*"    
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetBucketPolicy
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetBucketVersioning
+              - s3:ListBucket
+            Resource: 
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - !Sub "arn:aws:s3:::${S3Bucket}"             
+  
+  AppPipelineWebHook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubSecret}}"
+      Filters:
+        -
+          JsonPath: "$.ref"
+          MatchEquals: refs/heads/main 
+      TargetPipeline: !Ref CodePipeline
+      TargetAction: SourceAction
+      Name: AppPipelineWebHook
+      TargetPipelineVersion: !GetAtt CodePipeline.Version
+      RegisterWithThirdParty: true  
+        
+  CodePipeline:
+    DependsOn: 
+      - PipeLinePolicy
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: github-events-pipeline
+      RoleArn:
+        !GetAtt PipeLineRole.Arn
+      ArtifactStore:
+        Location: !Ref S3Bucket
+        Type: S3
+      Stages: 
+        # 1 stage - source - github
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              RunOrder: 1
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: '1'
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: stage1-source-output
+              Configuration:
+                Owner: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubOwner}}"
+                Repo: !Ref ParamGithubRepoName
+                Branch: main
+                OAuthToken: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubSecret}}"
+                PollForSourceChanges: false
+        # 2 stage - build - CodeBuild        
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              RunOrder: 1
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref CodeBuild
+              InputArtifacts:
+                - Name: stage1-source-output
+              OutputArtifacts:
+                - Name: stage2-build-output
+        # 3 stage - deploy - cloudformation    
+        - Name: Creation
+          Actions:
+            - Name: CreateChangeSet
+              RunOrder: 1
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: stage2-build-output
+              OutputArtifacts:
+                - Name: stage3-deploy-output
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Sub "${EnvironmentName}-pipeline"
+                ChangeSetName: !Sub "${EnvironmentName}-changeset"
+                Capabilities: CAPABILITY_NAMED_IAM
+                RoleArn: !GetAtt CloudformationDeployRole.Arn
+                TemplateConfiguration: !Sub "stage2-build-output::pipeline-parameters.json"
+                TemplatePath: !Sub "stage2-build-output::pipeline.yml"            
+
+Outputs:
+  DefaultVPC: 
+    Description: A reference to the created VPC
+    Value: !Ref DefaultVPC
+    Export:
+      Name: !Sub ${EnvironmentName}-vpc-id
+
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
+    Export:
+      Name: !Sub ${EnvironmentName}-public-subnets
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
+    Export:
+      Name: !Sub ${EnvironmentName}-private-subnets
+
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-public-subnet1
+
+  PublicSubnet2: 
+    Description: A reference to the public subnet in the 2nd Availability Zone
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-public-subnet2
+
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-private-subnet1
+
+  PrivateSubnet2: 
+    Description: A reference to the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-private-subnet2
+      
+  RepositoryOutput:
+    Description: ECR Repository
+    Value: !Ref ECRRepository
+    Export:
+      Name: !Sub ${EnvironmentName}-ecr-repo
+  
+  GithubRepositoryOutput:
+    Description: Github Repository
+    Value: !Ref ParamGithubRepoUrl
+    Export:
+      Name: !Sub ${EnvironmentName}-github-repo-url
+    
+  S3BucketOutput: 
+    Description: S3 Bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub ${EnvironmentName}-s3-bucket
+    
+  CodePipeLineOutput:
+    Description: Code pipeline
+    Value: !Ref CodePipeline
+    Export:
+      Name: !Sub ${EnvironmentName}-code-pipeline
+    
+  CodeBuildOutput:
+    Description: Code build
+    Value: !Ref CodeBuild
+    Export:
+      Name: !Sub ${EnvironmentName}-codebuild
+  

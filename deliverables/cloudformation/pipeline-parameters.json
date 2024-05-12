@@ -1,0 +1,38 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "udacity-cd12355"
+    },
+    {
+        "ParameterKey": "DefaultVPCCidr",
+        "ParameterValue": "10.10.0.0/16"
+    },
+    {
+        "ParameterKey": "PublicSubnet1CIDR",
+        "ParameterValue": "10.10.1.0/24"
+    },
+    {
+        "ParameterKey": "PublicSubnet2CIDR",
+        "ParameterValue": "10.10.2.0/24"
+    },
+    {
+        "ParameterKey": "PrivateSubnet1CIDR",
+        "ParameterValue": "10.10.3.0/24"
+    },
+    {
+        "ParameterKey": "PrivateSubnet2CIDR",
+        "ParameterValue": "10.10.4.0/24"
+    },
+    {
+        "ParameterKey": "ParamGithubRepoUrl",
+        "ParameterValue": "https://github.com/NapsterDinh/udacity-cd12355.git"
+    },
+    {
+        "ParameterKey": "ParamGithubRepoName",
+        "ParameterValue": "udacity-cd12355"
+    },
+    {
+        "ParameterKey": "ParamBuildSpecPath",
+        "ParameterValue": "./deliverables/k8s_config/buildspec.yml"
+    }
+]
