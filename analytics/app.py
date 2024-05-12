@@ -31,6 +31,7 @@ def readiness_check():
 
 def get_daily_visits():
     with app.app_context():
+        app.logger.info(db)
         result = db.session.execute(text("""
         SELECT Date(created_at) AS date,
             Count(*)         AS visits

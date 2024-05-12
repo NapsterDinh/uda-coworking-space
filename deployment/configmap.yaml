@@ -1,17 +1,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: <NAME OF THE ConfigMap>
+  name: tsu-coworking-config-map
 data:
-  DB_NAME: <ENTER YOUR DB NAME HERE>
-  DB_USER: <ENTER YOUR USER NAME HERE>
+  DB_NAME: tsu-coworking-db
+  DB_USER: tsu-user
   DB_HOST: <ENTER YOUR DB HOST HERE>
-  DB_PORT: <ENTER YOUR DB PORT HERE>
+  DB_PORT: 5432
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: <NAME OF THE Secret>
+  name: tsu-coworking-secret
 type: Opaque
 data:
-  <THE KEY FROM Secret WHICH has THE ENCODED PASSWORD>: <OUTPUT OF `echo -n 'the password' | base64`>
+  POSTGRES_DB: dHN1LWNvd29ya2luZy1kYg==
