@@ -505,21 +505,21 @@ Resources:
               - !Sub "arn:aws:s3:::${S3Bucket}/*"
               - !Sub "arn:aws:s3:::${S3Bucket}"             
   
-  AppPipelineWebHook:
-    Type: AWS::CodePipeline::Webhook
-    Properties:
-      Authentication: GITHUB_HMAC
-      AuthenticationConfiguration:
-        SecretToken: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubSecret}}"
-      Filters:
-        -
-          JsonPath: "$.ref"
-          MatchEquals: refs/heads/main 
-      TargetPipeline: !Ref CodePipeline
-      TargetAction: SourceAction
-      Name: AppPipelineWebHook
-      TargetPipelineVersion: !GetAtt CodePipeline.Version
-      RegisterWithThirdParty: true  
+  # AppPipelineWebHook:
+  #   Type: AWS::CodePipeline::Webhook
+  #   Properties:
+  #     Authentication: GITHUB_HMAC
+  #     AuthenticationConfiguration:
+  #       SecretToken: "{{resolve:secretsmanager:udacity-12355:SecretString:MyGitHubSecret}}"
+  #     Filters:
+  #       -
+  #         JsonPath: "$.ref"
+  #         MatchEquals: refs/heads/main 
+  #     TargetPipeline: !Ref CodePipeline
+  #     TargetAction: SourceAction
+  #     Name: AppPipelineWebHook
+  #     TargetPipelineVersion: !GetAtt CodePipeline.Version
+  #     RegisterWithThirdParty: true  
         
   CodePipeline:
     DependsOn: 
