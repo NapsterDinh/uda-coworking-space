@@ -405,8 +405,8 @@ Resources:
             Condition:
               StringEquals:
                 ec2:Subnet:
-                  - !Ref PrivateSubnet1
-                  - !Ref PrivateSubnet2
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet1}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet2}"
                 ec2:AuthorizedService: codebuild.amazonaws.com
     
   CodeBuildParameterStorePolicy:
